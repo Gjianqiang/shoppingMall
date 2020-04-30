@@ -1,0 +1,239 @@
+create or replace procedure L_P_SYNC_IAM_CM_PORT_SW
+
+as
+
+--T_DEVICE          T_RES_DEVICE%ROWTYPE;
+T_SQL VARCHAR(4096) ;
+T_SQL_2 VARCHAR(4096) ;
+T_NATIVE         ITST_T_NATIVE_GD_NEW%ROWTYPE;
+--t_count number;
+--T_SQL_CODE VARCHAR2(255);
+--T_SQL_ERR   VARCHAR2(255);
+t_partition_name   VARCHAR2(30);
+t_if_name  t_res_port.if_name%type;
+t_slot  VARCHAR2(30);
+t_sub_slot  VARCHAR2(30);
+t_sub_slot1  VARCHAR2(30);
+
+t_port_code  VARCHAR2(30);
+t_port_org VARCHAR2(30);
+
+t_port_org1 VARCHAR2(30);
+t_count number;
+
+BEGIN
+
+  T_SQL:='';
+ --日志任务id记录
+
+FOR I IN (
+  SELECT *    FROM ITST_T_NATIVE_GD_NEW 
+--  WHERE AREA_ID='GD-ST'
+  )
+  LOOP
+    
+  
+  
+  -------更新端口信息
+if 1=1 then   --20191105 重新启用 BY LXH
+  begin
+    t_count:=0;
+for j in (select a.rowid, func_replacechar(A.IF_ALIAS) remark1, func_replacechar(A.IF_DESCR) remark2
+  from t_res_port a 
+ where a.dev_type_id = 5
+   and area_id =i.area_id
+   and (a.if_alias is not null or a.if_descr is not null)
+   )
+ loop
+   begin
+      if j.remark1 is not null or j.remark2 is not null
+        then
+          begin
+             update t_res_port a 
+             set a.reseve1=nvl(j.remark1,j.remark2)
+             where a.rowid=j.rowid;
+             if t_count=1000 then
+          commit;
+          t_count:=0;
+          else 
+            t_count:=t_count+1;
+            end if;
+            EXCEPTION WHEN OTHERS THEN NULL;
+           end;
+        end if;  
+   
+     end;
+     end loop;
+  commit;
+ end;
+  
+  END IF;
+  
+if 1=1 then  --20191106 重新启用 BY LXH
+  
+    BEGIN
+ t_partition_name:='P_CM_DEVICE_SW_PORT_'||I.AREA_ID1;
+  t_sql:=  'alter table ODSD_CM_DEVICE_SW_PORT truncate partition '||t_partition_name;
+  execute immediate T_SQL;
+
+  --插入远程表数据
+
+  t_sql:='insert /*+ append */ into ODSD_CM_DEVICE_SW_PORT  PARTITION (' ||t_partition_name||')'|| chr(10) ||
+' (area_id,sharding_id,physic_device_id,id,alias,code,name,standard_code,standard_name,speed,sync_time,photoelectric_type_id)'|| chr(10) ||
+'SELECT '||''''||I.AREA_ID||''''||' AREA_ID,' || chr(10) ||
+'       sharding_id,' || chr(10) ||
+'       a.physic_device_id,' || chr(10) ||
+'       a.id,' || chr(10) ||
+'       a.alias,' || chr(10) ||
+'       a.code,' || chr(10) ||
+'       a.name,' || chr(10) ||
+'       a.standard_code,' || chr(10) ||
+'       a.standard_name,' || chr(10) ||
+' (SELECT NAME FROM  NEWRM_MAIN.mm_dictvalue'||i.NATIVE_ODSD_NEW||' C WHERE  a.max_deal_rate_id=c.id ) speed,' || chr(10) ||
+'       SYSDATE SYNC_TIME,photoelectric_type_id ' || chr(10) ||
+'  from '||I.NATIVE_RM_NEW||'.cm_port'||i.NATIVE_ODSD_NEW||' A' || chr(10) ||
+' where EXISTS (SELECT 1' || chr(10) ||
+'          FROM T_RES_DEVICE B' || chr(10) ||
+'         WHERE B.DEV_TYPE_ID = 5' || chr(10) ||
+'           AND B.AREA_ID = '||''''||I.AREA_ID||''''||chr(10) ||
+'           AND B.IS_VALID = ''Y''' || chr(10) ||
+'           AND a.physic_device_id = b.Dev_Id)';
+
+  execute immediate T_SQL;
+ COMMIT;
+ begin
+         commit;
+    T_NATIVE.Native_Odsd_New:=replace (i.native_odsd_new,'@','');
+    T_SQL_2:='alter session close database link '||T_NATIVE.Native_Odsd_New;
+    execute immediate T_SQL_2;
+  exception
+    when others then NULL;
+    end;
+    
+ END;
+ end if;
+
+-------------------------端口数据
+      for t_port in (
+        select B.*,ROWID
+          from ODSD_CM_DEVICE_SW_PORT b 
+         where b.area_id = i.area_id
+      --  AND B.PHYSIC_DEVICE_ID = 441075400000001032063870
+      --   AND b.PORT_ID IS NULL
+       --  AND B.STANDARD_NAME LIKE '%7800%'
+     --   AND B.REMARK IS NULL
+  /* and b.remark is null
+   and   exists (select 1
+          from t_res_port p
+         where p.area_id = i.area_id
+           AND b.DEV_ID = P.DEV_ID
+           AND P.DEV_TYPE_ID=5
+           AND P.SRC_PORT_ID=b.id)*/
+              
+               )
+   loop
+     begin  
+     begin
+     
+     --资源系统命名错误
+     if   t_port.speed='100M' and UPPER(t_port.standard_name) like '%GE%'
+       THEN
+         t_port.standard_name:=replace( UPPER(t_port.standard_name),'GE','FE');
+        ELSif   t_port.speed='1000M' and UPPER(t_port.standard_name) like '%FE%' 
+            and t_port.standard_name not like '%6502%'
+       THEN
+         t_port.standard_name:=replace( UPPER(t_port.standard_name),'FE','GE');
+       END IF;
+     
+     
+   rts_p_get_sw_port(i_area_id => t_port.Area_Id,
+                    i_devid => t_port.Physic_Device_Id,
+                    i_port_code => t_port.Standard_Name,
+                    o_dev_id => t_port.Dev_Id,
+                    o_port_id => t_port.Port_Id,
+                    o_port_code => t_port.Port_Code,
+                    o_slot => t_port.Slot,
+                    o_subslot => t_port.Sub_Slot,
+                    o_port => t_port.Port);                 
+     UPDATE ODSD_CM_DEVICE_SW_PORT A
+        SET A.DEV_ID    = nvl(t_port.Dev_Id,t_port.dev_id),
+            A.PORT_ID   = t_port.Port_Id,
+            A.PORT_CODE = t_port.Port_Code,
+            A.SLOT      = t_port.Slot,
+            A.SUB_SLOT  = t_port.Sub_Slot,
+            A.PORT      = t_port.Port,
+            a.photoelectric_type_id=t_port.photoelectric_type_id
+       WHERE A.ROWID=T_PORT.ROWID;
+     --  COMMIT;             
+            
+       IF t_port.Port_Id IS NOT NULL 
+         THEN
+       UPDATE T_RES_PORT A 
+       SET A.SRC_DEV_ID=A.DEV_ID,
+           A.SRC_PORT_ID=t_port.id,
+           A.PORT_NAME=A.IF_NAME,
+           A.PORT_CODE=t_port.code,
+           A.PORT_ALIAS=t_port.Alias,
+           A.STANDARD_CODE=t_port.Standard_Code,
+           A.STANDARD_NAME=t_port.Standard_Name,
+           A.REMARK='通过拆解槽位子槽端口可匹配设备上的端口'
+        WHERE A.DEV_TYPE_ID=5
+        AND A.AREA_ID=I.AREA_ID
+        AND A.DEV_ID=t_port.Dev_Id
+        AND A.PORT_ID=t_port.Port_Id;
+     
+       
+       END IF;
+           COMMIT;       
+end;    
+     end;
+     end loop; 
+------------------------------------------------------------- 
+
+IF 1=1 THEN
+UPDATE  odsd_cm_device_sw_port a
+SET A.REMARK='新一代未能扫描到端口'
+ where area_id = I.AREA_ID
+   AND   EXISTS
+ (SELECT 1
+          FROM T_RES_DEVICE B
+         WHERE A.PHYSIC_DEVICE_ID = B.DEV_ID
+         AND B.AREA_ID=I.AREA_ID
+         AND B.DEV_TYPE_ID=5
+         AND B.IS_VALID='Y'
+           AND NOT EXISTS (SELECT 1
+                  FROM T_RES_PORT P
+                 WHERE B.AREA_ID = P.AREA_ID
+                   AND P.DEV_TYPE_ID = 5
+                   AND B.DEV_ID = P.DEV_ID));
+
+
+UPDATE odsd_cm_device_sw_port a
+SET A.REMARK='拆解出来的槽位在设备上找不到相应槽位'
+ where area_id = I.AREA_ID
+   AND A.PORT_ID IS NULL
+   AND A.SLOT IS NOT NULL
+   and a.remark is null
+   and  NOT  exists (select 1
+          from t_res_port p
+         where p.area_id =I.AREA_ID
+           AND A.DEV_ID = P.DEV_ID
+           AND P.DEV_TYPE_ID=5
+           AND P.SLOT_NO=a.Slot);
+     commit;
+      
+           
+ 
+ 
+END IF;
+
+
+ END LOOP;
+ 
+    
+       commit;
+  
+
+EXCEPTION WHEN OTHERS THEN NULL;
+
+END;

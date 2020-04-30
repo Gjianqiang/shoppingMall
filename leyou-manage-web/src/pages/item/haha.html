@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>菜鸟教程(runoob.com)</title>
+<script>
+
+function findStrIndex(str, cha, num) {
+    num=num-1
+    var x = str.indexOf(cha);
+    for (var i = 0; i < num; i++) {
+        x = str.indexOf(cha, x + 1);
+    }
+    return x;
+}
+function bb(){
+//Script here
+//Script here
+var SPEED=SPEED
+var STANDARD_NAME=STANDARD_NAME
+if (SPEED=='100M' && STANDARD_NAME.toUpperCase().indexOf("GE") != -1 ){
+	STANDARD_NAME=STANDARD_NAME.toUpperCase().replace(/GE/g,'FE')	
+}else if(SPEED='1000M' && STANDARD_NAME.toUpperCase().indexOf("FE") != -1  && t_port.standard_name.indexOf("6502") ==-1){           
+	STANDARD_NAME=STANDARD_NAME.toUpperCase().replace(/FE/g,'GE')	
+}
+var T_PORT_CODE=STANDARD_NAME.replace(/\//g,"-" )
+T_PORT_CODE =T_PORT_CODE.replace(/-电源模块-/g,"-");
+
+}
+function displayDate(){
+    
+    var aa="1-93432452-10-2"
+    aa=aa.substr(findStrIndex(aa,"-",1)+1,findStrIndex(aa,"-",2)-findStrIndex(aa,"-",1))
+	document.getElementById("demo").innerHTML=aa;
+    }
+</script>
+</head>
+<body>
+
+<h1>我的第一个 JavaScript 程序</h1>
+<p id="demo">这是一个段落</p>
+
+<button type="button" onclick="displayDate()">显示日期</button>
+
+</body>
+</html>
